@@ -1,4 +1,4 @@
-module Main where
+module Main
 
 main : IO ()
 main = putStrLn "Hello world!"
