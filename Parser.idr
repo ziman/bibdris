@@ -10,16 +10,6 @@ instance Functor (Result str) where
 record ParserT : (m : Type -> Type) -> (str : Type) -> (a : Type) -> Type where
   PT : (runParserT : str -> m (Result str a)) -> ParserT m str a
 
-{-
-infixr 5 =<<
-(=<<) : Monad m => (a -> m b) -> m a -> m b
-f =<< x = x >>= f
-
-infixr 5 <=<
-(<=<) : Monad m => (b -> m c) -> (a -> m b) -> a -> m c
-g <=< f = \x => (f x >>= g)
--}
-
 instance Monad m => Functor (ParserT m str) where
   map f (PT p) = PT (map (map f) . p)
 
@@ -34,11 +24,15 @@ instance Monad m => Monad (ParserT m str) where
     Failure es   => pure (Failure es)
     Success s' y => let PT f' = f y in f' s')
 
-{-
 infixl 1 <??>
-(<??>) : ParserT m str a -> (Tag, String) -> ParserT m str a
-(PT f) <??> (t, msg) = \s => f s >>= \r => case r of
--}
+(<??>) : Monad m => ParserT m str a -> (Tag, String) -> ParserT m str a
+(PT f) <??> (t, msg) = PT $ \s => f s >>= \r => case r of
+   Failure es  => pure $ Failure ((t, s, msg) :: es)
+   Success s x => pure $ Success s x
+
+infixl 1 <?>
+(<?>) : Monad m => ParserT m str a -> String -> ParserT m str a
+p <?> msg = p <??> (User, msg)
 
 fail : str -> String -> Result str a
 fail s msg = Failure ((Lib, s, msg) :: [])
