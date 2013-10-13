@@ -20,9 +20,6 @@ infixr 5 <=<
 g <=< f = \x => (f x >>= g)
 -}
 
-fail : str -> String -> Result str a
-fail s msg = Failure ((Lib, s, msg) :: [])
-
 instance Monad m => Functor (ParserT m str) where
   map f (PT p) = PT (map (map f) . p)
 
@@ -41,7 +38,10 @@ instance Monad m => Monad (ParserT m str) where
 infixl 1 <??>
 (<??>) : ParserT m str a -> (Tag, String) -> ParserT m str a
 (PT f) <??> (t, msg) = \s => f s >>= \r => case r of
-                                                -}
+-}
+
+fail : str -> String -> Result str a
+fail s msg = Failure ((Lib, s, msg) :: [])
 
 char : Monad m => Char -> ParserT m String ()
 char c = PT f
