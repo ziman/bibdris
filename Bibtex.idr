@@ -44,17 +44,40 @@ item = do
   space
   return $ It name value
 
+comma : Parser ()
+comma = char ',' <$ space
+
 entry : Parser Entry
 entry = do
   char '@'
   type <- map pack $ some (satisfy (/= '{'))
   char '{'
   ident <- map pack $ some (satisfy (/= ','))
-  char ',' $> space
-  items <- item `sepBy` (char ',' $> space)
+  char ','
+  space
+  items <- item `sepBy` comma
   char '}'
   space
   return $ En type ident items
 
 bibtex : Parser (List Entry)
 bibtex = space $> many entry
+
+quote : String -> String
+quote s = "\"" ++ s ++ "\""
+
+brace : String -> String
+brace s = "{" ++ s ++ "}"
+
+cmap : (a -> String) -> List a -> String
+cmap f []        = ""
+cmap f (s :: ss) = f s ++ cmap f ss
+
+instance Show Item where
+  show (It n v) = quote n ++ " = " ++ brace v
+
+instance Show Entry where
+  show (En ty id xs) = "@" ++ id ++ "{\n" ++ cmap (("  " ++) . (++ "\n") . show) xs ++ "\n}"
+
+runParser : Parser a -> String -> Result String a
+runParser (PT f) s = let Id p = f s in p
