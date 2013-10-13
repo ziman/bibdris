@@ -37,13 +37,21 @@ p <?> msg = p <??> (User, msg)
 fail : str -> String -> Result str a
 fail s msg = Failure ((Lib, s, msg) :: [])
 
-char : Monad m => Char -> ParserT m String ()
-char c = PT f
+c2s : Char -> String
+c2s c = pack (c :: [])
+
+satisfy : Monad m => (Char -> Bool) -> ParserT m String Char
+satisfy p = PT f
   where
     f s with (strM s)
-      f "" | StrNil = pure . fail "" $ "char '" ++ pack (c :: []) ++ "' expected, eof found"
-      f (strCons x xs) | StrCons x xs = case c == x of
-          True  => pure $ Success xs ()
-          False => pure . fail (strCons x xs) $ "char '" ++ pack (c :: []) ++ "' expected"
+      f "" | StrNil
+          = pure . fail "" $ "unexpected eof"
+      f (strCons x xs) | StrCons x xs
+          = case p x of
+            True  => pure $ Success xs x
+            False => pure . fail (strCons x xs) $ "unexpected '" ++ c2s x ++ "'"
+
+char : Monad m => Char -> ParserT m String ()
+char c = satisfy (== c) >>= \_ => return () <??> (Lib, c2s c ++ " expected")
 
 --token : Monad m => String -> ParserT m String ()
