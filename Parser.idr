@@ -33,15 +33,20 @@ instance Monad m => Alternative (ParserT m str) where
     Success s' y => pure (Success s' y)
     Failure es   => y s
 
-infixl 1 <??>
+infixl 0 <??>
 (<??>) : Monad m => ParserT m str a -> (Tag, String) -> ParserT m str a
 (PT f) <??> (t, msg) = PT $ \s => f s >>= \r => case r of
    Failure es  => pure $ Failure ((t, s, msg) :: es)
    Success s x => pure $ Success s x
 
-infixl 1 <?>
+infixl 0 <?>
 (<?>) : Monad m => ParserT m str a -> String -> ParserT m str a
 p <?> msg = p <??> (User, msg)
+
+infixl 0 <?->
+private
+(<?->) : Monad m => ParserT m str a -> String -> ParserT m str a
+p <?-> msg = p <??> (Lib, msg)
 
 c2s : Char -> String
 c2s c = pack (c :: [])
@@ -61,14 +66,19 @@ satisfy p = PT f
             False => pure . fail (strCons x xs) $ "not '" ++ c2s x ++ "'"
 
 char : Monad m => Char -> ParserT m String ()
-char c = skip (satisfy (== c)) <??> (Lib, "character '" ++ c2s c ++ "'")
+char c = skip (satisfy (== c)) <?-> "character '" ++ c2s c ++ "'"
 
 string : Monad m => String -> ParserT m String ()
-string s = traverse_ char (unpack s) <??> (Lib, "string " ++ show s)
+string s = traverse_ char (unpack s) <?-> "string " ++ show s
 
-{-
+many : Monad m => ParserT m str a -> ParserT m str (List a)
+many p = [| p :: many p |] <|> pure []
+
+some : Monad m => ParserT m str a -> ParserT m str (List a)
+some p = [| p :: many p |]
+
 space : Monad m => ParserT m String ()
-space = skip . many $ \c => c == ' ' || c == '\t' || c == '\n' || c == '\r'
--}
+space = skip . many . satisfy $ isSpace <?-> "whitespace"
 
---token : Monad m => String -> ParserT m String ()
+token : Monad m => String -> ParserT m String ()
+token s = skip (string s) <$ space <?-> "token " ++ show s
