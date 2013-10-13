@@ -1,10 +1,11 @@
 module Parser
 
-data Result str a = Success str a | Failure String
+data Tag = Lib | User
+data Result str a = Success str a | Failure (List (Tag, str, String))
 
 instance Functor (Result str) where
   map f (Success s x) = Success s (f x)
-  map f (Failure e  ) = Failure e
+  map f (Failure es ) = Failure es
 
 record ParserT : (m : Type -> Type) -> (str : Type) -> (a : Type) -> Type where
   PT : (runParserT : str -> m (Result str a)) -> ParserT m str a
@@ -19,27 +20,36 @@ infixr 5 <=<
 g <=< f = \x => (f x >>= g)
 -}
 
+fail : str -> String -> Result str a
+fail s msg = Failure ((Lib, s, msg) :: [])
+
 instance Monad m => Functor (ParserT m str) where
   map f (PT p) = PT (map (map f) . p)
 
 instance Monad m => Applicative (ParserT m str) where
   pure x = PT (\s => pure (Success s x))
   (<$>) (PT f) (PT x) = PT (\s => f s >>= \f' => case f' of
-    Failure e    => pure (Failure e)
+    Failure es   => pure (Failure es)
     Success s' g => x s' >>= pure . map g)
 
 instance Monad m => Monad (ParserT m str) where
-  (>>=) {a} {b} (PT x) f = PT (\s => x s >>= cont)
-    where
-      cont : Result str a -> m (Result str b)
-      cont (Failure e   ) = pure (Failure e)
-      cont (Success s' y) = let PT f' = f y in f' s'
+  (>>=) (PT x) f = PT (\s => x s >>= \r => case r of
+    Failure es   => pure (Failure es)
+    Success s' y => let PT f' = f y in f' s')
 
-class Stream tok str where
-  uncons : str -> Maybe (tok, str)
+{-
+infixl 1 <??>
+(<??>) : ParserT m str a -> (Tag, String) -> ParserT m str a
+(PT f) <??> (t, msg) = \s => f s >>= \r => case r of
+                                                -}
 
-instance Stream Char String where
-  uncons s with (strM s)
-    uncons ""             | StrNil       = Nothing
-    uncons (strCons x xs) | StrCons x xs = Just (x, xs)
+char : Monad m => Char -> ParserT m String ()
+char c = PT f
+  where
+    f s with (strM s)
+      f "" | StrNil = pure . fail "" $ "char '" ++ pack (c :: []) ++ "' expected, eof found"
+      f (strCons x xs) | StrCons x xs = case c == x of
+          True  => pure $ Success xs ()
+          False => pure . fail (strCons x xs) $ "char '" ++ pack (c :: []) ++ "' expected"
 
+--token : Monad m => String -> ParserT m String ()
