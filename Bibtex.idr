@@ -19,20 +19,24 @@ record Entry : Type where
     -> (items : List Item)
     -> Entry
 
-Parser : Type -> Type
-Parser = ParserT Identity String
+infixr 3 <@>
+(<@>) : Functor f => (a -> b) -> f a -> f b
+f <@> x = map f x
 
 lit : Char -> Char -> Parser String
 lit l r = char l $> (map pack . many $ satisfy (/= r)) <$ char r
 
 quotedLiteral : Parser String
-quotedLiteral = lit '"' '"'
+quotedLiteral = lit '"' '"' <?> "quoted literal"
 
 bracedLiteral : Parser String
-bracedLiteral = lit '{' '}'
+bracedLiteral = lit '{' '}' <?> "braced literal"
+
+bareWord : Parser String
+bareWord = pack <@> some (satisfy isAlpha) <?> "bare word"
 
 literal : Parser String
-literal = quotedLiteral <|> bracedLiteral
+literal = quotedLiteral <|> bracedLiteral <|> bareWord
 
 item : Parser Item
 item = do
@@ -50,9 +54,9 @@ comma = char ',' <$ space
 entry : Parser Entry
 entry = do
   char '@'
-  type <- map pack $ some (satisfy (/= '{'))
+  type <- pack <@> some (satisfy (/= '{'))
   char '{'
-  ident <- map pack $ some (satisfy (/= ','))
+  ident <- pack <@> some (satisfy (/= ','))
   char ','
   space
   items <- item `sepBy` comma
@@ -78,6 +82,3 @@ instance Show Item where
 
 instance Show Entry where
   show (En ty id xs) = "@" ++ id ++ "{\n" ++ cmap (("  " ++) . (++ "\n") . show) xs ++ "\n}"
-
-runParser : Parser a -> String -> Result String a
-runParser (PT f) s = let Id p = f s in p
