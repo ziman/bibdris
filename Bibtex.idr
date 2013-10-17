@@ -29,14 +29,26 @@ lit l r = char l $> (map pack . many $ satisfy (/= r)) <$ char r
 quotedLiteral : Parser String
 quotedLiteral = lit '"' '"' <?> "quoted literal"
 
-bracedLiteral : Parser String
-bracedLiteral = lit '{' '}' <?> "braced literal"
+bracedLiteral : Int -> Parser String
+bracedLiteral n = do
+    char '{'
+    strings <- alternating unbraced $ bracedLiteral (n+1)
+    char '}'
+    return $ case n of
+      0 => concat strings
+      _ => "{" ++ concat strings ++ "}"
+  where
+    concat : List String -> String
+    concat = foldr (++) ""
+
+    unbraced : Parser String
+    unbraced = pack <@> many (satisfy $ \x => x /= '{' && x /= '}')
 
 bareWord : Parser String
 bareWord = pack <@> some (satisfy isAlpha) <?> "bare word"
 
 literal : Parser String
-literal = quotedLiteral <|> bracedLiteral <|> bareWord
+literal = quotedLiteral <|> bracedLiteral 0 <|> bareWord
 
 item : Parser Item
 item = do
