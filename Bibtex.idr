@@ -6,6 +6,8 @@ import Lightyear.Core
 import Lightyear.Combinators
 import Lightyear.String_
 
+import Utils
+
 record Item : Type where
   It
     :  (name : String)
@@ -18,10 +20,6 @@ record Entry : Type where
     -> (ident : String)
     -> (items : List Item)
     -> Entry
-
-infixr 3 <@>
-(<@>) : Functor f => (a -> b) -> f a -> f b
-f <@> x = map f x
 
 lit : Char -> Char -> Parser String
 lit l r = char l $> (map pack . many $ satisfy (/= r)) <$ char r

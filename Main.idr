@@ -2,6 +2,7 @@ module Main
 
 import System
 import Bibtex
+import Utils
 
 import Lightyear.String_
 
@@ -22,21 +23,12 @@ listEntries = traverse_ $ putStrLn . fmt
     fmt : Entry -> String
     fmt (En ty id its) = id ++ " :: " ++ field "author" its ++ " :: " ++ field "title" its
 
-(>>) : Monad m => m a -> m b -> m b
-x >> y = x >>= \_ => y
-
 processEntries : Args -> List Entry -> IO (List Entry)
 processEntries  List     es = listEntries es >> return es
 processEntries (Add url) es = (:: es) <@> addUrl url
 
 usage : IO ()
 usage = putStrLn "usage: bibdris db.bib (-a <url> | -l)"
-
-writeFile : String -> String -> IO ()
-writeFile fn stuff = do
-  f <- openFile fn Write
-  fwrite f stuff
-  closeFile f
 
 processFile : Args -> String -> IO ()
 processFile args fn = do
