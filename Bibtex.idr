@@ -73,12 +73,17 @@ quote s = "\"" ++ s ++ "\""
 brace : String -> String
 brace s = "{" ++ s ++ "}"
 
-cmap : (a -> String) -> List a -> String
-cmap f []        = ""
-cmap f (s :: ss) = f s ++ cmap f ss
+unitems : String -> String -> List String -> String
+unitems pre sep       []  = ""
+unitems pre sep (x :: []) = pre ++ x
+unitems pre sep (x :: xs) = pre ++ x ++ sep ++ unitems pre sep xs
 
 instance Show Item where
-  show (It n v) = quote n ++ " = " ++ brace v
+  show (It n v) = n ++ " = " ++ brace v
 
 instance Show Entry where
-  show (En ty id xs) = "@" ++ id ++ "{\n" ++ cmap (("  " ++) . (++ "\n") . show) xs ++ "\n}"
+  show (En ty id xs)
+    = "@" ++ ty ++ "{" ++ id ++ ",\n" ++ (unitems "  " ",\n" . map show) xs ++ "\n}\n"
+
+format : List Entry -> String
+format = unitems "" "\n" . map show
