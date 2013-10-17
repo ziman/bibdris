@@ -3,7 +3,7 @@ BibTeX database manager
 
 ## Usage
 
-```
+```bash
 $ bibdris db.bib -l     
 $ bibdris db.bib -a url
 ```
@@ -13,7 +13,7 @@ Options:
 * `-a url`: Add the PDF at the URL (TBD).
 
 ## Build
-```
+```bash
 $ idris -o bibdris --package lightyear Main.idr
 ```
 
