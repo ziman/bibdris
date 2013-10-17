@@ -12,7 +12,7 @@ Url = String
 data Args = List | Add Url
 
 addUrl : Url -> IO Entry
-addUrl = addUrl
+addUrl = addUrl -- TODO
 
 listEntries : List Entry -> IO ()
 listEntries = traverse_ $ putStrLn . fmt
