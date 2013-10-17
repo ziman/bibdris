@@ -8,13 +8,14 @@ $ bibdris db.bib -l
 $ bibdris db.bib -a url
 ```
 
-### Options:
-	* `-l`: List all items in the database.
-	* `-a url`: Add the PDF at the URL (TBD).
+### Options
+* `-l`: List all items in the database.
+* `-a url`: Add the PDF at the URL (TBD).
 
-### Build:
+### Build
 ```
 $ idris -o bibdris --package lightyear Main.idr
 ```
 
-Depends on [lightyear](https://github.com/ziman/lightyear).
+## Dependencies
+* [lightyear](https://github.com/ziman/lightyear) parsing combinators
