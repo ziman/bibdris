@@ -20,7 +20,7 @@ listEntries = traverse_ $ putStrLn . fmt
     field n = fromMaybe "?" . map value . Prelude.List.find (\(It k v) => k == n)
 
     fmt : Entry -> String
-    fmt (En ty id its) = id ++ "\t" ++ field "author" its ++ "\t" ++ field "title" its
+    fmt (En ty id its) = id ++ " :: " ++ field "author" its ++ " :: " ++ field "title" its
 
 (>>) : Monad m => m a -> m b -> m b
 x >> y = x >>= \_ => y
