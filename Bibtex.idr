@@ -33,12 +33,9 @@ bracedLiteral n = do
     strings <- alternating unbraced $ bracedLiteral (n+1)
     char '}'
     return $ case n of
-      0 => concat strings
-      _ => "{" ++ concat strings ++ "}"
+      0 => cat strings
+      _ => "{" ++ cat strings ++ "}"
   where
-    concat : List String -> String
-    concat = foldr (++) ""
-
     unbraced : Parser String
     unbraced = pack <@> many (satisfy $ \x => x /= '{' && x /= '}')
 

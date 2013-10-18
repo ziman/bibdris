@@ -11,8 +11,32 @@ Url = String
 
 data Args = List | Add Url
 
+inputBlock : IO (List String)
+inputBlock = do
+  ln <- trim <@> getLine
+  case ln of
+    "." => return []
+    _   => (ln ::) <@> inputBlock
+
+manualEntry : Url -> IO Entry
+manualEntry url = do
+  putStrLn "Switching to manual entry:"
+  manualEntry url
+
 addUrl : Url -> IO Entry
-addUrl = addUrl -- TODO
+addUrl url = do
+  putStrLn "Put BibTeX here, end with a '.' on an empty line."
+  stuff <- cat <@> inputBlock
+  e <- case stuff of
+    "" => manualEntry url
+    _  => case parse entry stuff of
+      Success "" e => return e
+      Failure es   => do
+        putStrLn "BibTeX entry not recognized."
+        manualEntry url
+  -- todo: assign an ID to the entry
+  -- todo: download the file
+  return e
 
 listEntries : List Entry -> IO ()
 listEntries = traverse_ $ putStrLn . fmt

@@ -14,3 +14,6 @@ writeFile fn stuff = do
   f <- openFile fn Write
   fwrite f stuff
   closeFile f
+
+cat : (Foldable f, Monoid a) => f a -> a
+cat = concat
