@@ -11,6 +11,10 @@ Url = String
 
 data Args = List | Add Url
 
+data LazyList : Type -> Type where
+  Ni : LazyList a
+  Co : (x : a) -> |(xs : LazyList a) -> LazyList a
+
 inputBlock : IO (List String)
 inputBlock = do
   ln <- trim <@> getLine
@@ -18,25 +22,39 @@ inputBlock = do
     "." => return []
     _   => (ln ::) <@> inputBlock
 
-manualEntry : Url -> IO Entry
-manualEntry url = do
+manualEntry : IO Entry
+manualEntry = do
   putStrLn "Switching to manual entry:"
-  manualEntry url
+  manualEntry
 
-addUrl : Url -> IO Entry
-addUrl url = do
+generateId : String -> String -> List String -> String
+generateId author year taken = ?generateId
+
+download : String -> Url -> IO ()
+download idt url = ?download
+
+inputEntry : IO Entry
+inputEntry = do
   putStrLn "Put BibTeX here, end with a '.' on an empty line."
   stuff <- cat <@> inputBlock
-  e <- case stuff of
-    "" => manualEntry url
+  case stuff of
+    "" => manualEntry
     _  => case parse entry stuff of
       Success "" e => return e
       Failure es   => do
         putStrLn "BibTeX entry not recognized."
-        manualEntry url
-  -- todo: assign an ID to the entry
-  -- todo: download the file
-  return e
+        manualEntry
+
+addUrl : Url -> List String -> IO Entry
+addUrl url takenIds = do
+    En ty _ its' <- inputEntry
+
+    let idt = generateId (find "author" "anon" its') (find "year" "" its') takenIds
+    let its = update "url" url its'
+
+    download idt url
+
+    return $ En ty idt its
 
 listEntries : List Entry -> IO ()
 listEntries = traverse_ $ putStrLn . fmt
@@ -49,7 +67,7 @@ listEntries = traverse_ $ putStrLn . fmt
 
 processEntries : Args -> List Entry -> IO (List Entry)
 processEntries  List     es = listEntries es >> return es
-processEntries (Add url) es = (:: es) <@> addUrl url
+processEntries (Add url) es = (:: es) <@> addUrl url (map ident es)
 
 usage : IO ()
 usage = putStrLn "usage: bibdris db.bib (-a <url> | -l)"

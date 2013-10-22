@@ -33,7 +33,7 @@ bracedLiteral n = do
     strings <- alternating unbraced $ bracedLiteral (n+1)
     char '}'
     return $ case n of
-      0 => cat strings
+      0 =>        cat strings
       _ => "{" ++ cat strings ++ "}"
   where
     unbraced : Parser String
@@ -94,3 +94,15 @@ instance Show Entry where
 
 format : List Entry -> String
 format = unitems "" "\n" . map show
+
+update : String -> String -> List Item -> List Item
+update k v [] = It k v :: []
+update k v (It k' v' :: xs) with (k == k')
+  | True  = It k  v  :: xs
+  | False = It k' v' :: update k v xs
+
+find : String -> String -> List Item -> String
+find k def [] = def
+find k def (It k' v' :: xs) with (k == k')
+  | True  = v'
+  | False = find k def xs
