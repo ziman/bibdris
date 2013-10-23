@@ -32,15 +32,34 @@ inputBlock = do
     "." => return []
     _   => (ln ::) <@> inputBlock
 
+askFor : String -> IOE (List Item -> List Item)
+askFor k = do
+  prn $ k ++ ":"
+  v <- trim <@> ioe_lift getLine
+  return $ case v of
+    "" => id
+    _  => (It k v ::)
+
 manualEntry : IOE Entry
 manualEntry = do
-  prn "Switching to manual entry:"
-  throw "manual entry not implemented yet"
+    prn "Switching to manual entry:"
+    ty <- do
+      prn "type [article]:"
+      ty <- trim <@> ioe_lift getLine
+      return $ case ty of
+        "" => "article"
+        _  => ty
+
+    its <- foldr ($) Prelude.List.Nil <@> traverse askFor requiredItems
+    return $ En ty "no-id-yet" its
+  where
+    requiredItems : List String
+    requiredItems = ["title", "author", "year"]
 
 abbreviated : String -> String
 abbreviated txt = pack . map toLower $ case surnames of
     []      => unpack "unknown"
-    s :: [] => unpack s
+    [s] => unpack s
     _       => map firstLetter surnames
   where
     authors : List String
@@ -50,8 +69,8 @@ abbreviated txt = pack . map toLower $ case surnames of
     names = map words authors
 
     surname : List String -> String
-    surname []        = "unknown"
-    surname (x :: []) = x
+    surname []  = "unknown"
+    surname [x] = x
     surname (x :: xs) = surname xs
 
     surnames : List String
@@ -80,10 +99,11 @@ generateId author year taken = first (\x => not $ elem x taken) idents
     numbered n = Co (auth ++ yr ++ "-" ++ show n) (numbered $ n+1)
 
     idents : InfList String
-    idents = Co (auth ++ yr) (numbered 1)
+    idents = Co (auth ++ yr) (numbered 2)
 
 download : String -> Url -> IOE ()
 download idt url = do
+  prn $ "wget -O " ++ phdPapers ++ "/" ++ idt ++ ".pdf " ++ url
   result <- ioe_lift . system $ "wget -O " ++ phdPapers ++ "/" ++ idt ++ ".pdf " ++ url
   case result of
     Status 0 => return ()
@@ -118,7 +138,7 @@ listEntries = traverse_ $ prn . fmt
     field n = fromMaybe "?" . map value . Prelude.List.find (\(It k v) => k == n)
 
     fmt : Entry -> String
-    fmt (En ty id its) = id ++ " :: " ++ field "author" its ++ " :: " ++ field "title" its
+    fmt (En ty id its) = id ++ " -- " ++ field "author" its ++ " -- " ++ field "title" its
 
 processEntries : Args -> List Entry -> IOE (List Entry)
 processEntries  List     es = listEntries es >> return es
@@ -139,10 +159,10 @@ processFile args = do
 main' : IOE ()
 main' = ioe_lift getArgs >>= processArgs
   where
-    processArgs (_ :: "-a" :: url :: [])
+    processArgs [_, "-a", url]
       = processFile (Add url)
 
-    processArgs (_ :: "-l" :: [])
+    processArgs [_, "-l"]
       = processFile List
 
     processArgs _
