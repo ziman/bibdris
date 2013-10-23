@@ -1,6 +1,8 @@
 module Main
 
 import System
+import Control.Catchable
+
 import Bibtex
 import Utils
 
@@ -11,41 +13,94 @@ Url = String
 
 data Args = List | Add Url
 
-data LazyList : Type -> Type where
-  Ni : LazyList a
-  Co : (x : a) -> |(xs : LazyList a) -> LazyList a
+data InfList : Type -> Type where
+  Co : (x : a) -> |(xs : InfList a) -> InfList a
 
-inputBlock : IO (List String)
+phdRoot : String
+phdRoot = "/home/ziman/phd"
+
+phdBibtex : String
+phdBibtex = phdRoot ++ "/db.bib"
+
+phdPapers : String
+phdPapers = phdRoot ++ "/papers"
+
+inputBlock : IOE (List String)
 inputBlock = do
-  ln <- trim <@> getLine
+  ln <- trim <@> ioe_lift getLine
   case ln of
     "." => return []
     _   => (ln ::) <@> inputBlock
 
-manualEntry : IO Entry
+manualEntry : IOE Entry
 manualEntry = do
-  putStrLn "Switching to manual entry:"
-  manualEntry
+  prn "Switching to manual entry:"
+  throw "manual entry not implemented yet"
+
+abbreviated : String -> String
+abbreviated txt = pack . map toLower $ case surnames of
+    []      => unpack "unknown"
+    s :: [] => unpack s
+    _       => map firstLetter surnames
+  where
+    authors : List String
+    authors = split (== ',') txt
+
+    names : List (List String)
+    names = map words authors
+
+    surname : List String -> String
+    surname []        = "unknown"
+    surname (x :: []) = x
+    surname (x :: xs) = surname xs
+
+    surnames : List String
+    surnames = map surname names
+
+    firstLetter : String -> Char
+    firstLetter n with (strM n)
+      firstLetter ""             | StrNil       = '_'
+      firstLetter (strCons x xs) | StrCons x xs = x
+
+first : (a -> Bool) -> InfList a -> a
+first p (Co x xs) with (p x)
+  | True  = x
+  | False = first p xs
 
 generateId : String -> String -> List String -> String
-generateId author year taken = ?generateId
+generateId author year taken = first (\x => not $ elem x taken) idents
+  where
+    yr : String
+    yr = pack . reverse . take 2 . reverse . unpack $ year
 
-download : String -> Url -> IO ()
-download idt url = ?download
+    auth : String
+    auth = abbreviated author
 
-inputEntry : IO Entry
+    numbered : Int -> InfList String
+    numbered n = Co (auth ++ yr ++ "-" ++ show n) (numbered $ n+1)
+
+    idents : InfList String
+    idents = Co (auth ++ yr) (numbered 1)
+
+download : String -> Url -> IOE ()
+download idt url = do
+  result <- ioe_lift . system $ "wget -O " ++ phdPapers ++ "/" ++ idt ++ ".pdf " ++ url
+  case result of
+    Status 0 => return ()
+    Status n => throw $ "wget: exit status " ++ show n
+    Failure  => throw $ "could not execute wget"
+
+inputEntry : IOE Entry
 inputEntry = do
-  putStrLn "Put BibTeX here, end with a '.' on an empty line."
+  prn "Put BibTeX here, end with a '.' on an empty line."
   stuff <- cat <@> inputBlock
   case stuff of
     "" => manualEntry
     _  => case parse entry stuff of
       Success "" e => return e
-      Failure es   => do
-        putStrLn "BibTeX entry not recognized."
-        manualEntry
+      Failure es   => throw $ "BibTeX entry not recognized: " ++ show es
 
-addUrl : Url -> List String -> IO Entry
+addUrl : Url -> List String -> IOE Entry
 addUrl url takenIds = do
     En ty _ its' <- inputEntry
 
@@ -56,8 +111,8 @@ addUrl url takenIds = do
 
     return $ En ty idt its
 
-listEntries : List Entry -> IO ()
-listEntries = traverse_ $ putStrLn . fmt
+listEntries : List Entry -> IOE ()
+listEntries = traverse_ $ prn . fmt
   where
     field : String -> List Item -> String
     field n = fromMaybe "?" . map value . Prelude.List.find (\(It k v) => k == n)
@@ -65,30 +120,33 @@ listEntries = traverse_ $ putStrLn . fmt
     fmt : Entry -> String
     fmt (En ty id its) = id ++ " :: " ++ field "author" its ++ " :: " ++ field "title" its
 
-processEntries : Args -> List Entry -> IO (List Entry)
+processEntries : Args -> List Entry -> IOE (List Entry)
 processEntries  List     es = listEntries es >> return es
 processEntries (Add url) es = (:: es) <@> addUrl url (map ident es)
 
-usage : IO ()
-usage = putStrLn "usage: bibdris db.bib (-a <url> | -l)"
+usage : IOE ()
+usage = prn "usage: bibdris (-a <url> | -l)"
 
-processFile : Args -> String -> IO ()
-processFile args fn = do
-  stuff <- readFile fn
+processFile : Args -> IOE ()
+processFile args = do
+  stuff <- ioe_lift $ readFile phdBibtex
   case parse bibtex stuff of
     Success s es => do
       es' <- processEntries args es
-      writeFile fn $ format es'
-    Failure es => putStrLn (show es)
+      ioe_lift (writeFile phdBibtex $ format es')
+    Failure es => throw $ "could not parse bibtex db: " ++ show es
 
-main : IO ()
-main = getArgs >>= processArgs
+main' : IOE ()
+main' = ioe_lift getArgs >>= processArgs
   where
-    processArgs (_ :: fn :: "-a" :: url :: [])
-      = processFile (Add url) fn
+    processArgs (_ :: "-a" :: url :: [])
+      = processFile (Add url)
 
-    processArgs (_ :: fn :: "-l" :: [])
-      = processFile List fn
+    processArgs (_ :: "-l" :: [])
+      = processFile List
 
     processArgs _
       = usage
+
+main : IO ()
+main = ioe_run main' (putStrLn . ("error: "++)) pure

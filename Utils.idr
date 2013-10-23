@@ -1,6 +1,13 @@
 module Utils
 
+import Control.IOExcept
+
 %access public
+
+data ExitStatus = Failure | Status Int
+
+IOE : Type -> Type
+IOE = IOExcept String
 
 infixr 3 <@>
 (<@>) : Functor f => (a -> b) -> f a -> f b
@@ -17,3 +24,13 @@ writeFile fn stuff = do
 
 cat : (Foldable f, Monoid a) => f a -> a
 cat = concat
+
+system : String -> IO ExitStatus
+system cmd = translate <@> mkForeign (FFun "system" [FString] FInt) cmd
+  where
+    translate : Int -> ExitStatus
+    translate (-1) = Failure
+    translate n    = Status n
+
+prn : String -> IOE ()
+prn = ioe_lift . putStrLn
