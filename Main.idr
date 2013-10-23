@@ -117,8 +117,8 @@ inputEntry = do
   case stuff of
     "" => manualEntry
     _  => case parse entry stuff of
-      Success "" e => return e
-      Failure es   => throw $ "BibTeX entry not recognized: " ++ show es
+      Right e   => return e
+      Left  err => throw $ "BibTeX entry not recognized:\n" ++ err
 
 addUrl : Url -> List String -> IOE Entry
 addUrl url takenIds = do
@@ -151,10 +151,10 @@ processFile : Args -> IOE ()
 processFile args = do
   stuff <- ioe_lift $ readFile phdBibtex
   case parse bibtex stuff of
-    Success s es => do
+    Right es => do
       es' <- processEntries args es
       ioe_lift (writeFile phdBibtex $ format es')
-    Failure es => throw $ "could not parse bibtex db: " ++ show es
+    Left err => throw $ "Could not parse bibtex db:\n" ++ err
 
 main' : IOE ()
 main' = ioe_lift getArgs >>= processArgs
