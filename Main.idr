@@ -6,7 +6,7 @@ import Control.Catchable
 import Bibtex
 import Utils
 
-import Lightyear.String_
+import Lightyear.Strings
 
 Url : Type
 Url = String
@@ -57,10 +57,7 @@ manualEntry = do
     requiredItems = ["title", "author", "year"]
 
 abbreviated : String -> String
-abbreviated txt = pack . map toLower $ case surnames of
-    []      => unpack "unknown"
-    [s] => unpack s
-    _       => map firstLetter surnames
+abbreviated txt = pack . map toLower . abbreviate $ surnames
   where
     authors : List String
     authors = split (== ',') txt
@@ -80,6 +77,11 @@ abbreviated txt = pack . map toLower $ case surnames of
     firstLetter n with (strM n)
       firstLetter ""             | StrNil       = '_'
       firstLetter (strCons x xs) | StrCons x xs = x
+
+    abbreviate : (surnames : List String) -> List Char
+    abbreviate []  = unpack "unknown"
+    abbreviate [s] = unpack s
+    abbreviate ss  = map firstLetter ss
 
 first : (a -> Bool) -> InfList a -> a
 first p (Co x xs) with (p x)

@@ -4,7 +4,7 @@ import Control.Monad.Identity
 
 import Lightyear.Core
 import Lightyear.Combinators
-import Lightyear.String_
+import Lightyear.Strings
 
 import Utils
 
