@@ -6,10 +6,12 @@ import Control.Catchable
 import Bibtex
 import Utils
 
-import Lightyear.Strings
+import Data.Text
+import Data.Text.IO
+import Lightyear.Text
 
 Url : Type
-Url = String
+Url = Text
 
 data Args = List | Add Url
 
@@ -25,60 +27,60 @@ phdBibtex = phdRoot ++ "/db.bib"
 phdPapers : String
 phdPapers = phdRoot ++ "/papers"
 
-inputBlock : IOE (List String)
+inputBlock : IOE (List Text)
 inputBlock = do
   ln <- trim <@> ioe_lift getLine
-  case ln of
-    "." => return []
-    _   => (ln ::) <@> inputBlock
+  if ln == str "."
+     then return []
+     else (ln ::) <@> inputBlock
 
-askFor : String -> IOE (List Item -> List Item)
+askFor : Text -> IOE (List Item -> List Item)
 askFor k = do
-  prn $ k ++ ":"
+  prn $ k ++ str ":"
   v <- trim <@> ioe_lift getLine
-  return $ case v of
-    "" => id
-    _  => (It k v ::)
+  return $ if null v
+    then id
+    else (It k v ::)
 
 manualEntry : IOE Entry
 manualEntry = do
-    prn "Switching to manual entry:"
+    prn $ str "Switching to manual entry:"
     ty <- do
-      prn "type [article]:"
+      prn $ str "type [article]:"
       ty <- trim <@> ioe_lift getLine
-      return $ case ty of
-        "" => "article"
-        _  => ty
+      return $ if null ty
+        then str "article"
+        else ty
 
     its <- foldr ($) Prelude.List.Nil <@> traverse askFor requiredItems
-    return $ En ty "no-id-yet" its
+    return $ En ty (str "no-id-yet") its
   where
-    requiredItems : List String
-    requiredItems = ["title", "author", "year"]
+    requiredItems : List Text
+    requiredItems = [str "title", str "author", str "year"]
 
-abbreviated : String -> String
+abbreviated : Text -> Text
 abbreviated txt = pack . map toLower . abbreviate $ surnames
   where
-    authors : List String
+    authors : List Text
     authors = split (== ',') txt
 
-    names : List (List String)
+    names : List (List Text)
     names = map words authors
 
-    surname : List String -> String
+    surname : List Text -> Text
     surname []  = "unknown"
     surname [x] = x
     surname (x :: xs) = surname xs
 
-    surnames : List String
+    surnames : List Text
     surnames = map surname names
 
-    firstLetter : String -> Char
-    firstLetter n with (strM n)
-      firstLetter ""             | StrNil       = '_'
-      firstLetter (strCons x xs) | StrCons x xs = x
+    firstLetter : Text -> CodePoint
+    firstLetter n with (head n)
+      | Nothing = fromChar '_'
+      | Just c  = c
 
-    abbreviate : (surnames : List String) -> List Char
+    abbreviate : (surnames : List Text) -> List CodePoint
     abbreviate []  = unpack "unknown"
     abbreviate [s] = unpack s
     abbreviate ss  = map firstLetter ss
@@ -88,46 +90,48 @@ first p (Co x xs) with (p x)
   | True  = x
   | False = first p xs
 
-generateId : String -> String -> List String -> String
+generateId : Text -> Text -> List Text -> Text
 generateId author year taken = first (\x => not $ elem x taken) idents
   where
-    yr : String
-    yr = pack . reverse . take 2 . reverse . unpack $ year
+    yr : Text
+    yr = reverse . take 2 . reverse $ year
 
-    auth : String
+    auth : Text
     auth = abbreviated author
 
-    numbered : Int -> InfList String
+    numbered : Int -> InfList Text
     numbered n = Co (auth ++ yr ++ "-" ++ show n) (numbered $ n+1)
 
-    idents : InfList String
+    idents : InfList Text
     idents = Co (auth ++ yr) (numbered 2)
 
-download : String -> Url -> IOE ()
+download : Text -> Url -> IOE ()
 download idt url = do
-  prn $ "wget -O " ++ phdPapers ++ "/" ++ idt ++ ".pdf " ++ url
-  result <- ioe_lift . system $ "wget -O " ++ phdPapers ++ "/" ++ idt ++ ".pdf " ++ url
-  case result of
-    Status 0 => return ()
-    Status n => throw $ "wget: exit status " ++ show n
-    Failure  => throw $ "could not execute wget"
+    result <- sys $ str "wget -O " ++ phdPapers ++ str "/" ++ idt ++ str ".pdf " ++ url
+    case result of
+      Status 0 => return ()
+      Status n => throw $ "wget: exit status " ++ show n
+      Failure  => throw $ "could not execute wget"
+  where
+    sys : Text -> IOE ExitStatus
+    sys = ioe_lift . system . toString . getBytes 
 
 inputEntry : IOE Entry
 inputEntry = do
-  prn "Put BibTeX here, end with a '.' on an empty line."
+  prn $ str "Put BibTeX here, end with a '.' on an empty line."
   stuff <- cat <@> inputBlock
-  case stuff of
-    "" => manualEntry
-    _  => case parse entry stuff of
+  if null stuff
+    then manualEntry
+    else case parse entry stuff of
       Right e   => return e
       Left  err => throw $ "BibTeX entry not recognized:\n" ++ err
 
-addUrl : Url -> List String -> IOE Entry
+addUrl : Url -> List Text -> IOE Entry
 addUrl url takenIds = do
     En ty _ its' <- inputEntry
 
-    let idt = generateId (find "author" "anon" its') (find "year" "" its') takenIds
-    let its = update "url" url its'
+    let idt = generateId (find (str "author") (str "anon") its') (find (str "year") empty its') takenIds
+    let its = update (str "url") url its'
 
     download idt url
 
@@ -136,18 +140,18 @@ addUrl url takenIds = do
 listEntries : List Entry -> IOE ()
 listEntries = traverse_ $ prn . fmt
   where
-    field : String -> List Item -> String
-    field n = fromMaybe "?" . map value . Prelude.List.find (\(It k v) => k == n)
+    field : Text -> List Item -> Text
+    field n = fromMaybe (str "?") . map value . Prelude.List.find (\(It k v) => k == n)
 
-    fmt : Entry -> String
-    fmt (En ty id its) = id ++ " -- " ++ field "author" its ++ " -- " ++ field "title" its
+    fmt : Entry -> Text
+    fmt (En ty id its) = id ++ str " -- " ++ field (str "author") its ++ " -- " ++ field (str "title") its
 
 processEntries : Args -> List Entry -> IOE (List Entry)
 processEntries  List     es = listEntries es >> return es
 processEntries (Add url) es = (:: es) <@> addUrl url (map ident es)
 
 usage : IOE ()
-usage = prn "usage: bibdris (-a <url> | -l)"
+usage = prn $ str "usage: bibdris (-a <url> | -l)"
 
 processFile : Args -> IOE ()
 processFile args = do
@@ -155,14 +159,14 @@ processFile args = do
   case parse bibtex stuff of
     Right es => do
       es' <- processEntries args es
-      ioe_lift (writeFile phdBibtex $ format es')
+      ioe_lift (writeFile phdBibtex UTF8 $ format es')
     Left err => throw $ "Could not parse bibtex db:\n" ++ err
 
 main' : IOE ()
 main' = ioe_lift getArgs >>= processArgs
   where
     processArgs [_, "-a", url]
-      = processFile (Add url)
+      = processFile (Add $ fromString url `asEncodedIn` UTF8)
 
     processArgs [_, "-l"]
       = processFile List
