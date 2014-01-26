@@ -24,25 +24,37 @@ record Entry : Type where
     -> Entry
 
 lit : Char -> Char -> Parser Text
-lit l r = char l $> (map Data.Text.pack . many $ satisfy (/= fromChar r)) <$ char r
+lit l r = char l $> content <$ char r
+  where
+    content : Parser Text
+    content = map Data.Text.pack . many $ satisfy (/= fromChar r)
+
+-- This is a hint for the elaborator
+-- in order to resolve typeclasses properly.
+-- The culprit are probably insufficient constraints on encoding,
+-- in Lightyear.Text, which makes encoding impossible to infer.
+-- By forcing the type to Parser, we also force the encoding to be UTF-8.
+elabHint : Parser a -> Parser a
+elabHint = id
 
 token : String -> Parser ()
-token s = ascii s <$ space
+token s = ascii s $> elabHint space
 
 quotedLiteral : Parser Text
 quotedLiteral = lit '"' '"' <?> "quoted literal"
 
 bracedLiteral : Int -> Parser Text
 bracedLiteral n = do
-    char '{'
-    strings <- alternating unbraced $ bracedLiteral (n+1)
-    char '}'
-    return $ case n of
-      0 =>        cat strings
-      _ => "{" ++ cat strings ++ "}"
+    strings <- char '{' $> alternating unbraced (bracedLiteral (n+1)) <$ char '}'
+    return $ if n == 0
+      then cat strings
+      else str "{" ++ cat strings ++ str "}"
   where
+    nonBrace : Parser CodePoint
+    nonBrace = satisfy (\x => x /= fromChar '{' && x /= fromChar '}')
+
     unbraced : Parser Text
-    unbraced = Data.Text.pack <@> many (satisfy $ \x => x /= fromChar '{' && x /= fromChar '}')
+    unbraced = Data.Text.pack <@> many nonBrace
 
 bareWord : Parser Text
 bareWord = Data.Text.pack <@> some (satisfy isAlpha) <?> "bare word"
@@ -69,7 +81,7 @@ entry = do
   return $ En type ident items
 
 bibtex : Parser (List Entry)
-bibtex = space $> many entry
+bibtex = elabHint space $> many entry
 
 quote : Text -> Text
 quote s = str "\"" ++ s ++ str "\""
