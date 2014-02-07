@@ -22,7 +22,7 @@ record Entry : Type where
     -> Entry
 
 lit : Char -> Char -> Parser String
-lit l r = char l $> (map pack . many $ satisfy (/= r)) <$ char r
+lit l r = char l $> (map {f = Parser} pack . many $ satisfy (/= r)) <$ char r
 
 quotedLiteral : Parser String
 quotedLiteral = lit '"' '"' <?> "quoted literal"

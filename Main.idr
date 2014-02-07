@@ -38,23 +38,24 @@ askFor k = do
   v <- trim <@> ioe_lift getLine
   return $ case v of
     "" => id
-    _  => (It k v ::)
+    _  => ((It k v) ::)
 
 manualEntry : IOE Entry
 manualEntry = do
     prn "Switching to manual entry:"
     ty <- do
       prn "type [article]:"
-      ty <- trim <@> ioe_lift getLine
-      return $ case ty of
-        "" => "article"
-        _  => ty
+      default "article" . trim <@> ioe_lift getLine
 
-    its <- foldr ($) Prelude.List.Nil <@> traverse askFor requiredItems
+    its <- foldr apply Prelude.List.Nil <@> traverse askFor requiredItems
     return $ En ty "no-id-yet" its
   where
     requiredItems : List String
     requiredItems = ["title", "author", "year"]
+
+    default : String -> String -> String
+    default dflt "" = dflt
+    default dflt s  = s
 
 abbreviated : String -> String
 abbreviated txt = pack . map toLower . abbreviate $ surnames
