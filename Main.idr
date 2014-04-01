@@ -14,7 +14,7 @@ Url = String
 data Args = List | Add Url
 
 data InfList : Type -> Type where
-  Co : (x : a) -> |(xs : InfList a) -> InfList a
+  Co : (x : a) -> (xs : Lazy (InfList a)) -> InfList a
 
 phdRoot : String
 phdRoot = "/home/ziman/phd"
@@ -29,7 +29,7 @@ inputBlock : IOE (List String)
 inputBlock = do
   ln <- trim <@> ioe_lift getLine
   case ln of
-    "." => return []
+    "." => pure List.Nil
     _   => (ln ::) <@> inputBlock
 
 askFor : String -> IOE (List Item -> List Item)
@@ -58,7 +58,7 @@ manualEntry = do
     default dflt s  = s
 
 abbreviated : String -> String
-abbreviated txt = pack . map toLower . abbreviate $ surnames
+abbreviated txt = pack . map Char.toLower . abbreviate $ surnames
   where
     authors : List String
     authors = split (== ',') txt
@@ -93,7 +93,7 @@ generateId : String -> String -> List String -> String
 generateId author year taken = first (\x => not $ elem x taken) idents
   where
     yr : String
-    yr = pack . reverse . take 2 . reverse . unpack $ year
+    yr = pack . List.reverse . take 2 . List.reverse . unpack $ year
 
     auth : String
     auth = abbreviated author

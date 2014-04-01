@@ -3,6 +3,7 @@ module Utils
 import Control.IOExcept
 
 %access public
+%default total
 
 data ExitStatus = Failure | Status Int
 
