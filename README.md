@@ -14,7 +14,7 @@ $ bibdris db.bib -a url
 
 Options:
 * `-l`: List all items in the database.
-* `-a url`: Add the PDF at the URL (TBD).
+* `-a url`: Add the PDF at the URL.
 
 ## Build
 ```bash
