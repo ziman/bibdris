@@ -45,7 +45,7 @@ quotedLiteral = lit '"' '"' <?> "quoted literal"
 
 bracedLiteral : Int -> Parser Text
 bracedLiteral n = do
-    strings <- char '{' $> alternating unbraced (bracedLiteral (n+1)) <$ char '}'
+    strings <- char '{' $>| alternating unbraced (bracedLiteral (n+1)) <$| char '}'
     return $ if n == 0
       then cat strings
       else str "{" ++ cat strings ++ str "}"
