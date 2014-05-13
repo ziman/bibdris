@@ -2,106 +2,116 @@ module Bibtex
 
 import Control.Monad.Identity
 
+import Data.Text
+
 import Lightyear.Core
 import Lightyear.Combinators
-import Lightyear.Strings
+import Lightyear.Text
 
 import Utils
 
 record Item : Type where
   It
-    :  (name : String)
-    -> (value : String)
+    :  (name : Text)
+    -> (value : Text)
     -> Item
 
 record Entry : Type where
   En
-    :  (type : String)
-    -> (ident : String)
+    :  (type : Text)
+    -> (ident : Text)
     -> (items : List Item)
     -> Entry
 
-lit : Char -> Char -> Parser String
-lit l r = char l $> (map {f = Parser} pack . many $ satisfy (/= r)) <$ char r
+lit : Char -> Char -> Parser Text
+lit l r = char l $> content <$ char r
+  where
+    content : Parser Text
+    content = map Data.Text.pack . many $ satisfy (/= fromChar r)
 
-quotedLiteral : Parser String
+-- This is a hint for the elaborator
+-- in order to resolve typeclasses properly.
+-- The culprit are probably insufficient constraints on encoding,
+-- in Lightyear.Text, which makes encoding impossible to infer.
+-- By forcing the type to Parser, we also force the encoding to be UTF-8.
+elabHint : Parser a -> Parser a
+elabHint = id
+
+token : String -> Parser ()
+token s = ascii s $> elabHint space
+
+quotedLiteral : Parser Text
 quotedLiteral = lit '"' '"' <?> "quoted literal"
 
-bracedLiteral : Int -> Parser String
+bracedLiteral : Int -> Parser Text
 bracedLiteral n = do
-    char '{'
-    strings <- alternating unbraced $ bracedLiteral (n+1)
-    char '}'
-    return $ case n of
-      0 =>        cat strings
-      _ => "{" ++ cat strings ++ "}"
+    strings <- char '{' $>| alternating unbraced (bracedLiteral (n+1)) <$| char '}'
+    return $ if n == 0
+      then cat strings
+      else str "{" ++ cat strings ++ str "}"
   where
-    unbraced : Parser String
-    unbraced = pack <@> many (satisfy $ \x => x /= '{' && x /= '}')
+    nonBrace : Parser CodePoint
+    nonBrace = satisfy (\x => x /= fromChar '{' && x /= fromChar '}')
 
-bareWord : Parser String
-bareWord = pack <@> some (satisfy isAlpha) <?> "bare word"
+    unbraced : Parser Text
+    unbraced = Data.Text.pack <@> many nonBrace
 
-literal : Parser String
-literal = quotedLiteral <|> bracedLiteral 0 <|> bareWord
+bareWord : Parser Text
+bareWord = Data.Text.pack <@> some (satisfy isAlpha) <?> "bare word"
+
+literal : Parser Text
+literal = (quotedLiteral <|> bracedLiteral 0 <|> bareWord) <$ space
 
 item : Parser Item
 item = do
   name <- literal
-  space
-  char '='
-  space
+  token "="
   value <- literal
-  space
   return $ It name value
-
-comma : Parser ()
-comma = char ',' <$ space
 
 entry : Parser Entry
 entry = do
-  char '@'
-  type <- pack <@> some (satisfy (/= '{'))
-  char '{'
-  ident <- pack <@> some (satisfy (/= ','))
-  char ','
-  space
-  items <- item `sepBy` comma
-  char '}'
-  space
+  token "@"
+  type <- Data.Text.pack <@> some (satisfy (/= fromChar '{'))
+  token "{"
+  ident <- Data.Text.pack <@> some (satisfy (/= fromChar ','))
+  token ","
+  items <- item `sepBy` token ","
+  token "}"
   return $ En type ident items
 
 bibtex : Parser (List Entry)
-bibtex = space $> many entry
+bibtex = elabHint space $> many entry
 
-quote : String -> String
-quote s = "\"" ++ s ++ "\""
+quote : Text -> Text
+quote s = str "\"" ++ s ++ str "\""
 
-brace : String -> String
-brace s = "{" ++ s ++ "}"
+brace : Text -> Text
+brace s = str "{" ++ s ++ str "}"
 
-unitems : String -> String -> List String -> String
-unitems pre sep       []  = ""
+unitems : Text -> Text -> List Text -> Text
+unitems pre sep       []  = empty
 unitems pre sep (x :: []) = pre ++ x
 unitems pre sep (x :: xs) = pre ++ x ++ sep ++ unitems pre sep xs
 
-instance Show Item where
-  show (It n v) = n ++ " = " ++ brace v
+showItem : Item -> Text
+showItem (It n v) = n ++ str " = " ++ brace v
 
-instance Show Entry where
-  show (En ty id xs)
-    = "@" ++ ty ++ "{" ++ id ++ ",\n" ++ (unitems "  " ",\n" . map show) xs ++ "\n}\n"
+showEntry : Entry -> Text
+showEntry (En ty id xs) = str "@" ++ ty ++ str "{" ++ id ++ str ",\n"
+    ++ (unitems (str "  ") (str ",\n") . map showItem) xs
+    ++ str "\n}\n"
 
-format : List Entry -> String
-format = unitems "" "\n" . map show
+format : List Entry -> Text
+format = unitems (str "") (str "\n") . map showEntry
 
-update : String -> String -> List Item -> List Item
+update : Text -> Text -> List Item -> List Item
 update k v [] = It k v :: []
 update k v (It k' v' :: xs) with (k == k')
   | True  = It k  v  :: xs
   | False = It k' v' :: update k v xs
 
-find : String -> String -> List Item -> String
+find : Text -> Text -> List Item -> Text
 find k def [] = def
 find k def (It k' v' :: xs) with (k == k')
   | True  = v'
