@@ -6,17 +6,14 @@ import Control.Catchable
 import Bibtex
 import Utils
 
-import Data.Text
-import Data.Text.IO
-import Lightyear.Text
+import Data.Text as T
+import Data.Text.IO as TIO
+import Lightyear.Text as LT
 
 Url : Type
 Url = Text
 
 data Args = List | Add Url
-
-data InfList : Type -> Type where
-  Co : (x : a) -> |(xs : InfList a) -> InfList a
 
 phdRoot : String
 phdRoot = "/home/ziman/phd"
@@ -29,30 +26,30 @@ phdPapers = phdRoot ++ "/papers"
 
 inputBlock : IOE (List Text)
 inputBlock = do
-  ln <- trim <@> ioe_lift getLine
+  ln <- T.trim <@> ioe_lift getLine
   if ln == str "."
-     then return []
+     then return List.Nil
      else (ln ::) <@> inputBlock
 
 askFor : Text -> IOE (List Item -> List Item)
 askFor k = do
   prn $ k ++ str ":"
-  v <- trim <@> ioe_lift getLine
+  v <- T.trim <@> ioe_lift getLine
   return $ if null v
-    then id
-    else (It k v ::)
+     then id
+     else ((It k v) ::)
 
 manualEntry : IOE Entry
 manualEntry = do
     prn $ str "Switching to manual entry:"
     ty <- do
       prn $ str "type [article]:"
-      ty <- trim <@> ioe_lift getLine
+      ty <- T.trim <@> ioe_lift getLine
       return $ if null ty
         then str "article"
         else ty
 
-    its <- foldr ($) Prelude.List.Nil <@> traverse askFor requiredItems
+    its <- foldr apply List.Nil <@> traverse askFor requiredItems
     return $ En ty (str "no-id-yet") its
   where
     requiredItems : List Text
@@ -62,13 +59,13 @@ abbreviated : Text -> Text
 abbreviated txt = pack . map toLower . abbreviate $ surnames
   where
     authors : List Text
-    authors = split (== ',') txt
+    authors = split (== fromChar ',') txt
 
     names : List (List Text)
     names = map words authors
 
     surname : List Text -> Text
-    surname []  = "unknown"
+    surname []  = str "unknown"
     surname [x] = x
     surname (x :: xs) = surname xs
 
@@ -81,12 +78,12 @@ abbreviated txt = pack . map toLower . abbreviate $ surnames
       | Just c  = c
 
     abbreviate : (surnames : List Text) -> List CodePoint
-    abbreviate []  = unpack "unknown"
+    abbreviate []  = unpack $ str "unknown"
     abbreviate [s] = unpack s
     abbreviate ss  = map firstLetter ss
 
-first : (a -> Bool) -> InfList a -> a
-first p (Co x xs) with (p x)
+first : (a -> Bool) -> Stream a -> a
+first p (x :: xs) with (p x)
   | True  = x
   | False = first p xs
 
@@ -99,15 +96,15 @@ generateId author year taken = first (\x => not $ elem x taken) idents
     auth : Text
     auth = abbreviated author
 
-    numbered : Int -> InfList Text
-    numbered n = Co (auth ++ yr ++ "-" ++ show n) (numbered $ n+1)
+    numbered : Int -> Stream Text
+    numbered n = (auth ++ yr ++ str "-" ++ str (show n)) :: (numbered $ n+1)
 
-    idents : InfList Text
-    idents = Co (auth ++ yr) (numbered 2)
+    idents : Stream Text
+    idents = (auth ++ yr) :: numbered 2
 
 download : Text -> Url -> IOE ()
 download idt url = do
-    result <- sys $ str "wget -O " ++ phdPapers ++ str "/" ++ idt ++ str ".pdf " ++ url
+    result <- sys $ str "wget -O " ++ str phdPapers ++ str "/" ++ idt ++ str ".pdf " ++ url
     case result of
       Status 0 => return ()
       Status n => throw $ "wget: exit status " ++ show n
@@ -124,7 +121,7 @@ inputEntry = do
     then manualEntry
     else case parse entry stuff of
       Right e   => return e
-      Left  err => throw $ "BibTeX entry not recognized:\n" ++ err
+      Left  err => throw $ "BibTeX entry not recognized:\n" ++ toString (getBytes err)
 
 addUrl : Url -> List Text -> IOE Entry
 addUrl url takenIds = do
@@ -144,7 +141,7 @@ listEntries = traverse_ $ prn . fmt
     field n = fromMaybe (str "?") . map value . Prelude.List.find (\(It k v) => k == n)
 
     fmt : Entry -> Text
-    fmt (En ty id its) = id ++ str " -- " ++ field (str "author") its ++ " -- " ++ field (str "title") its
+    fmt (En ty id its) = id ++ str " -- " ++ field (str "author") its ++ str " -- " ++ field (str "title") its
 
 processEntries : Args -> List Entry -> IOE (List Entry)
 processEntries  List     es = listEntries es >> return es
@@ -155,12 +152,12 @@ usage = prn $ str "usage: bibdris (-a <url> | -l)"
 
 processFile : Args -> IOE ()
 processFile args = do
-  stuff <- ioe_lift $ readFile phdBibtex
+  stuff <- ioe_lift $ readTextFile (str phdBibtex) UTF8
   case parse bibtex stuff of
     Right es => do
       es' <- processEntries args es
-      ioe_lift (writeFile phdBibtex UTF8 $ format es')
-    Left err => throw $ "Could not parse bibtex db:\n" ++ err
+      ioe_lift (writeTextFile (str phdBibtex) UTF8 $ format es')
+    Left err => throw $ "Could not parse bibtex db:\n" ++ toString (getBytes err)
 
 main' : IOE ()
 main' = ioe_lift getArgs >>= processArgs
@@ -175,4 +172,4 @@ main' = ioe_lift getArgs >>= processArgs
       = usage
 
 main : IO ()
-main = ioe_run main' (putStrLn . ("error: "++)) pure
+main = ioe_run main' (Prelude.putStrLn . ("error: "++)) pure
